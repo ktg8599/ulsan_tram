@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traffic Simulation Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
+        #gameCanvas {
+            width: 1280px;
+            height: 720px;
+            background-color: #fff;
+            border: 1px solid #000;
+            position: relative;
+            cursor: crosshair;
+        }
+        #restrictedArea {
+            position: absolute;
+            left: 50px;
+            top: 100px;
+            width: 800px;
+            height: 470px;
+            background-image: url('map.png');
+            background-size: cover;
+            background-position: center;
+            border: 2px dashed #000;
+        }
+        .grid-line {
+            position: absolute;
+            background-color: #ccc;
+        }
+        .square {
+            width: 10px;
+            height: 10px;
+            background-color: #00FF00;
+            position: absolute;
+        }
+        #previewDot {
+            width: 12px;
+            height: 12px;
+            background-color: rgba(255, 0, 0, 0.7);
+            position: absolute;
+            pointer-events: none;
+            visibility: hidden;
+        }
+        #removePreviewDot {
+            width: 12px;
+            height: 12px;
+            background-color: rgba(255, 0, 0, 0.7);
+            position: absolute;
+            pointer-events: none;
+            visibility: hidden;
+        }
+        .button {
+            position: absolute;
+            top: 620px;
+            width: 100px;
+            height: 50px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+            text-align: center;
+            line-height: 50px;
+            font-size: 16px;
+            border-radius: 5px;
+        }
+        .button:active {
+            background-color: #0056b3;
+        }
+        #installButton {
+            left: 50px;
+        }
+        #removeButton {
+            left: 200px;
+        }
+        #moneyBox {
+            position: absolute;
+            left: 900px;
+            top: 100px;
+            width: 150px;
+            height: 50px;
+            border: 2px solid #000;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 0 15px;
+            font-size: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameCanvas">
+        <div id="restrictedArea">
+            <div id="previewDot"></div>
+            <div id="removePreviewDot"></div>
+        </div>
+        <div id="moneyBox">500</div>
+        <button id="installButton" class="button">Install</button>
+        <button id="removeButton" class="button">Remove</button>
+    </div>
+    <script>
+        const restrictedArea = document.getElementById('restrictedArea');
+        const previewDot = document.getElementById('previewDot');
+        const removePreviewDot = document.getElementById('removePreviewDot');
+        const installButton = document.getElementById('installButton');
+        const removeButton = document.getElementById('removeButton');
+        const moneyBox = document.getElementById('moneyBox');
+
+        const gridSize = 10; // 격자 간격
+        const dotSize = 10; // dot 크기
+
+        let canPlaceDot = false;
+        let canRemoveDot = false;
+        let money = 500;
+
+        function drawGrid() {
+            const areaWidth = restrictedArea.offsetWidth;
+            const areaHeight = restrictedArea.offsetHeight;
+
+            for (let x = 0; x <= areaWidth; x += gridSize) {
+                const verticalLine = document.createElement('div');
+                verticalLine.classList.add('grid-line');
+                verticalLine.style.width = '1px';
+                verticalLine.style.height = `${areaHeight}px`;
+                verticalLine.style.left = `${x}px`;
+                verticalLine.style.top = '0';
+                restrictedArea.appendChild(verticalLine);
+            }
+
+            for (let y = 0; y <= areaHeight; y += gridSize) {
+                const horizontalLine = document.createElement('div');
+                horizontalLine.classList.add('grid-line');
+                horizontalLine.style.width = `${areaWidth}px`;
+                horizontalLine.style.height = '1px';
+                horizontalLine.style.left = '0';
+                horizontalLine.style.top = `${y}px`;
+                restrictedArea.appendChild(horizontalLine);
+            }
+        }
+
+        function findNearestDot(x, y) {
+            const rect = restrictedArea.getBoundingClientRect();
+            const dots = Array.from(restrictedArea.getElementsByClassName('square'));
+            let nearestDot = null;
+            let nearestDistance = gridSize;
+
+            dots.forEach(dot => {
+                const dotRect = dot.getBoundingClientRect();
+                const dotCenterX = dotRect.left + dotRect.width / 2 - rect.left;
+                const dotCenterY = dotRect.top + dotRect.height / 2 - rect.top;
+                const distance = Math.sqrt(
+                    Math.pow(x - dotCenterX, 2) + Math.pow(y - dotCenterY, 2)
+                );
+
+                if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    nearestDot = dot;
+                }
+            });
+
+            return nearestDot;
+        }
+
+        restrictedArea.addEventListener('mousemove', (event) => {
+            const rect = restrictedArea.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            const snappedX = Math.round(x / gridSize) * gridSize;
+            const snappedY = Math.round(y / gridSize) * gridSize;
+
+            if (snappedX >= 0 && snappedX <= rect.width && snappedY >= 0 && snappedY <= rect.height) {
+                if (canPlaceDot) {
+                    previewDot.style.left = `${snappedX - (dotSize + 2) / 2}px`;
+                    previewDot.style.top = `${snappedY - (dotSize + 2) / 2}px`;
+                    previewDot.style.visibility = 'visible';
+                } else {
+                    previewDot.style.visibility = 'hidden';
+                }
+
+                if (canRemoveDot) {
+                    const nearestDot = findNearestDot(x, y);
+
+                    if (nearestDot) {
+                        const dotRect = nearestDot.getBoundingClientRect();
+                        removePreviewDot.style.left = `${dotRect.left - rect.left - (dotSize + 2) / 2}px`;
+                        removePreviewDot.style.top = `${dotRect.top - rect.top - (dotSize + 2) / 2}px`;
+                        removePreviewDot.style.visibility = 'visible';
+                    } else {
+                        removePreviewDot.style.visibility = 'hidden';
+                    }
+                } else {
+                    removePreviewDot.style.visibility = 'hidden';
+                }
+            } else {
+                previewDot.style.visibility = 'hidden';
+                removePreviewDot.style.visibility = 'hidden';
+            }
+        });
+
+        restrictedArea.addEventListener('mouseleave', () => {
+            previewDot.style.visibility = 'hidden';
+            removePreviewDot.style.visibility = 'hidden';
+        });
+
+        installButton.addEventListener('click', () => {
+            canPlaceDot = true;
+            canRemoveDot = false;
+        });
+
+        removeButton.addEventListener('click', () => {
+            canRemoveDot = true;
+            canPlaceDot = false;
+        });
+
+        restrictedArea.addEventListener('click', (event) => {
+            const rect = restrictedArea.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            const snappedX = Math.round(x / gridSize) * gridSize;
+            const snappedY = Math.round(y / gridSize) * gridSize;
+
+            if (snappedX >= 0 && snappedX <= rect.width && snappedY >= 0 && snappedY <= rect.height) {
+                if (canPlaceDot) {
+                    if (money - 50 >= 0) {
+                        const square = document.createElement('div');
+                        square.classList.add('square');
+                        square.style.left = `${snappedX - dotSize / 2}px`;
+                        square.style.top = `${snappedY - dotSize / 2}px`;
+
+                        restrictedArea.appendChild(square);
+                        money -= 50;
+                        moneyBox.textContent = money;
+                        canPlaceDot = false;
+                        previewDot.style.visibility = 'hidden';
+                    }
+                } else if (canRemoveDot) {
+                    const nearestDot = findNearestDot(x, y);
+                    if (nearestDot) {
+                        nearestDot.remove();
+                        canRemoveDot = false;
+                        removePreviewDot.style.visibility = 'hidden';
+                    }
+                }
+            }
+        });
+
+        drawGrid();
+    </script>
+</body>
+</html>
